@@ -23,7 +23,7 @@ The browser calls the public lichess API directly, without a token. lichess allo
 - `src/render.ts`: functions that return HTML strings: summary cards, GitHub-style calendar, games table with sorting and filtering. Escape any user data with `esc()`.
 - `src/main.ts`: global `state`, a `render()` that re-renders everything, event delegation on `document`, and the `localStorage` cache.
 
-Caching in `main.ts`: games are stored under `lch:games:<userId>`, with `version: 1` in the payload; the "Analyser depuis le" date is stored under `lch:since:<userId>`. "Rafraîchir" is incremental: `incrementalSince` keeps cached games created before the oldest ongoing game, since finished games are immutable, and re-downloads everything after that date. "Tout recharger" ignores the cache. If the `Game` shape changes in an incompatible way, bump the cache version.
+Caching in `main.ts`: games are stored under `lch:games:<userId>`, with `version: 1` in the payload; the selected period is stored under `lch:since:<userId>`, as a preset key (`PRESETS` in `stats.ts`) or a custom `YYYY-MM-DD` start date. The period filters every section (on `createdAt`), except the ongoing-games chart, which still counts games started before the period. "Rafraîchir" is incremental: `incrementalSince` keeps cached games created before the oldest ongoing game, since finished games are immutable, and re-downloads everything after that date. "Tout recharger" ignores the cache. If the `Game` shape changes in an incompatible way, bump the cache version.
 
 ## lichess API quirks (verified empirically, don't "simplify" them away)
 

@@ -20,6 +20,10 @@
     <main id="content" hidden>
       <section>
         <h2 id="user-title"></h2>
+        <div class="period">
+          <div id="presets" class="filters"></div>
+          <label id="custom-period">ou depuis le <input type="date" id="since" /></label>
+        </div>
         <div class="cards" id="summary"></div>
       </section>
 
@@ -29,10 +33,7 @@
       </section>
 
       <section>
-        <div class="section-head">
-          <h2>Une partie par jour ?</h2>
-          <label>Analyser depuis le <input type="date" id="since" /></label>
-        </div>
+        <h2>Une partie par jour ?</h2>
         <div class="legend">
           <i class="missed"></i> manqué
           <i class="l1"></i> 1 <i class="l2"></i> 2 <i class="l3"></i> 3+
@@ -41,6 +42,11 @@
         <div id="calendar"></div>
         <h3>Jours manqués</h3>
         <div id="missed"></div>
+      </section>
+
+      <section>
+        <h2>Parties en cours au fil du temps</h2>
+        <div id="ongoing-chart"></div>
       </section>
 
       <section id="games">

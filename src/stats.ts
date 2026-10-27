@@ -103,3 +103,48 @@ export function computeStats(games: Game[], byDay: Map<string, Game[]>, since: D
     longestStreak,
   };
 }
+
+export interface DayCount {
+  day: Date;
+  count: number;
+}
+
+// Snapshot at the end of each day (now for today). A finished game is considered over at its last move.
+export function ongoingByDay(games: Game[], since: Date, today: Date, now: number): DayCount[] {
+  const played = games.filter((g) => g.result !== 'aborted');
+  const starts = played.map((g) => g.createdAt).sort((a, b) => a - b);
+  const ends = played.filter((g) => !g.ongoing).map((g) => g.lastMoveAt).sort((a, b) => a - b);
+  const points: DayCount[] = [];
+  let started = 0;
+  let ended = 0;
+  for (const day of eachDay(since, today)) {
+    const t = Math.min(+addDays(day, 1), now);
+    while (started < starts.length && starts[started] < t) started++;
+    while (ended < ends.length && ends[ended] < t) ended++;
+    points.push({ day, count: started - ended });
+  }
+  return points;
+}
+
+export const PRESETS = { '30d': '30 jours', '3m': '3 mois', '6m': '6 mois', year: 'Cette année', '12m': '12 mois', all: 'Tout' } as const;
+export type Preset = keyof typeof PRESETS;
+
+export const isPreset = (p: string): p is Preset => p in PRESETS;
+
+export function presetStart(p: Preset, today: Date): Date | undefined {
+  const [y, m, d] = [today.getFullYear(), today.getMonth(), today.getDate()];
+  switch (p) {
+    case '30d':
+      return addDays(today, -29);
+    case '3m':
+      return new Date(y, m - 3, d + 1);
+    case '6m':
+      return new Date(y, m - 6, d + 1);
+    case 'year':
+      return new Date(y, 0, 1);
+    case '12m':
+      return new Date(y - 1, m, d + 1);
+    case 'all':
+      return undefined;
+  }
+}

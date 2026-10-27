@@ -1,12 +1,26 @@
 import './style.css';
 import { LichessError, fetchGames, fetchUser, type Game, type User } from './lichess';
-import { computeStats, dayKey, gamesByDay, parseDayKey } from './stats';
 import {
+  PRESETS,
+  computeStats,
+  dayKey,
+  gamesByDay,
+  isPreset,
+  ongoingByDay,
+  parseDayKey,
+  presetStart,
+  type DayCount,
+  type Preset,
+} from './stats';
+import {
+  chartScale,
   esc,
   filterGames,
   fmtDate,
+  fmtLongDate,
   renderCalendar,
   renderMissed,
+  renderOngoingChart,
   renderOldest,
   renderSummary,
   renderTable,
@@ -36,6 +50,9 @@ interface State {
 
 const state: State = { games: [], filter: 'all', sort: { key: 'createdAt', dir: -1 } };
 let controller: AbortController | undefined;
+let periodGames: Game[] = [];
+let chartPoints: DayCount[] = [];
+let chartWidth = 0;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
@@ -112,12 +129,24 @@ async function load(username: string, full = false) {
   render();
 }
 
-function sinceDate(): Date | undefined {
+// Stored as a preset key, or as a YYYY-MM-DD start date for a custom period.
+const storedPeriod = (id: string) => localStorage.getItem(sinceKey(id)) ?? 'all';
+
+function sinceDate(today: Date): Date | undefined {
   const { user, games } = state;
   if (!user || !games.length) return undefined;
   const first = parseDayKey(dayKey(games.at(-1)!.createdAt));
-  const stored = localStorage.getItem(sinceKey(user.id));
-  return stored && parseDayKey(stored) > first ? parseDayKey(stored) : first;
+  const period = storedPeriod(user.id);
+  const start = isPreset(period) ? presetStart(period, today) : parseDayKey(period);
+  return start && start > first ? start : first;
+}
+
+function setPeriod(period: string) {
+  if (!state.user) return;
+  if (period === 'all') localStorage.removeItem(sinceKey(state.user.id));
+  else localStorage.setItem(sinceKey(state.user.id), period);
+  state.day = undefined;
+  render();
 }
 
 function renderStatus() {
@@ -141,7 +170,9 @@ function render() {
   renderStatus();
   const { user, games } = state;
   const content = $('content');
-  const since = sinceDate();
+  const now = Date.now();
+  const today = parseDayKey(dayKey(now));
+  const since = sinceDate(today);
   content.hidden = !user || !since;
   if (!user || !since) {
     if (user && state.loading === undefined && !state.error) {
@@ -150,10 +181,14 @@ function render() {
     return;
   }
 
-  const now = Date.now();
-  const today = parseDayKey(dayKey(now));
-  const byDay = gamesByDay(games);
-  const stats = computeStats(games, byDay, since, today);
+  periodGames = games.filter((g) => g.createdAt >= +since);
+  const byDay = gamesByDay(periodGames);
+  const stats = computeStats(periodGames, byDay, since, today);
+  const period = storedPeriod(user.id);
+  $('presets').innerHTML = (Object.keys(PRESETS) as Preset[])
+    .map((p) => `<button data-period="${p}" class="${period === p ? 'active' : ''}">${PRESETS[p]}</button>`)
+    .join('');
+  $('custom-period').classList.toggle('active', !isPreset(period));
 
   const elo = user.corrRating ? ` · ${user.corrRating} elo` : '';
   $('user-title').innerHTML = `<a href="https://lichess.org/@/${esc(user.id)}" target="_blank" rel="noopener">${esc(user.username)}</a>
@@ -165,15 +200,23 @@ function render() {
   sinceInput.max = dayKey(today);
   $('calendar').innerHTML = renderCalendar(byDay, since, today, state.day);
   $('missed').innerHTML = renderMissed(stats.missedRanges);
+  chartPoints = ongoingByDay(games, since, today, now);
+  renderChart();
   renderGames();
+}
+
+function renderChart() {
+  const el = $('ongoing-chart');
+  chartWidth = el.clientWidth;
+  el.innerHTML = renderOngoingChart(chartPoints, chartWidth);
 }
 
 function renderGames() {
   const counts: Record<Filter, number> = {
-    all: state.games.length,
-    ongoing: filterGames(state.games, 'ongoing').length,
-    myturn: filterGames(state.games, 'myturn').length,
-    finished: filterGames(state.games, 'finished').length,
+    all: periodGames.length,
+    ongoing: filterGames(periodGames, 'ongoing').length,
+    myturn: filterGames(periodGames, 'myturn').length,
+    finished: filterGames(periodGames, 'finished').length,
   };
   const labels: Record<Filter, string> = { all: 'Toutes', ongoing: 'En cours', myturn: 'À toi de jouer', finished: 'Terminées' };
   $('filters').innerHTML = (Object.keys(labels) as Filter[])
@@ -182,7 +225,7 @@ function renderGames() {
   $('day-filter').innerHTML = state.day
     ? `<span class="chip">Parties démarrées le ${fmtDate(parseDayKey(state.day))} <button data-action="clear-day" title="Retirer le filtre">×</button></span>`
     : '';
-  $('table').innerHTML = renderTable(filterGames(state.games, state.filter, state.day), state.sort, Date.now());
+  $('table').innerHTML = renderTable(filterGames(periodGames, state.filter, state.day), state.sort, Date.now());
 }
 
 function selectDay(day: string) {
@@ -217,16 +260,14 @@ document.addEventListener('click', (e) => {
     renderGames();
   }
 
+  const period = target.closest<HTMLElement>('[data-period]')?.dataset.period;
+  if (period) setPeriod(period);
+
   const day = target.closest<HTMLElement>('#calendar [data-day]')?.dataset.day;
   if (day) selectDay(day);
 });
 
-sinceInput.addEventListener('change', () => {
-  if (!state.user) return;
-  if (sinceInput.value) localStorage.setItem(sinceKey(state.user.id), sinceInput.value);
-  else localStorage.removeItem(sinceKey(state.user.id));
-  render();
-});
+sinceInput.addEventListener('change', () => setPeriod(sinceInput.value || 'all'));
 
 function openRow(e: MouseEvent) {
   const target = e.target as HTMLElement;
@@ -250,6 +291,41 @@ $('table').addEventListener('mouseover', (e) => {
   preview.hidden = false;
 });
 $('table').addEventListener('mouseleave', () => (preview.hidden = true));
+
+new ResizeObserver(() => {
+  if (chartPoints.length && $('ongoing-chart').clientWidth !== chartWidth) renderChart();
+}).observe($('ongoing-chart'));
+
+$('ongoing-chart').addEventListener('pointermove', (e) => {
+  const el = $('ongoing-chart');
+  const svg = el.querySelector('svg');
+  const hover = svg?.querySelector<SVGGElement>('.hover');
+  const tip = el.querySelector<HTMLElement>('.chart-tip');
+  if (!svg || !hover || !tip) return;
+  const scale = chartScale(chartPoints, chartWidth);
+  const box = svg.getBoundingClientRect();
+  const origin = el.getBoundingClientRect();
+  const i = scale.indexAt(e.clientX - box.left);
+  const p = chartPoints[i];
+  const x = scale.x(i);
+  const y = scale.y(p.count);
+  hover.querySelector('line')!.setAttribute('x1', String(x));
+  hover.querySelector('line')!.setAttribute('x2', String(x));
+  hover.querySelector('circle')!.setAttribute('cx', String(x));
+  hover.querySelector('circle')!.setAttribute('cy', String(y));
+  hover.setAttribute('visibility', 'visible');
+  tip.querySelector('strong')!.textContent = `${p.count} partie${p.count > 1 ? 's' : ''} en cours`;
+  tip.querySelector('span')!.textContent = fmtLongDate(p.day);
+  tip.hidden = false;
+  const half = tip.offsetWidth / 2;
+  tip.style.left = `${Math.min(Math.max(box.left - origin.left + x, half), el.clientWidth - half)}px`;
+  tip.style.top = `${box.top - origin.top + y}px`;
+});
+$('ongoing-chart').addEventListener('pointerleave', () => {
+  $('ongoing-chart').querySelector<SVGGElement>('.hover')?.setAttribute('visibility', 'hidden');
+  const tip = $('ongoing-chart').querySelector<HTMLElement>('.chart-tip');
+  if (tip) tip.hidden = true;
+});
 
 const initial = new URLSearchParams(location.search).get('u') ?? localStorage.getItem('lch:last');
 if (initial) load(initial);
