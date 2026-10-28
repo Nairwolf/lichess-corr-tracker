@@ -1,4 +1,4 @@
-# Lichess — parties par correspondance
+# lichess-corr-tracker — parties par correspondance
 
 Petit site local pour visualiser les parties par correspondance d'un joueur lichess :
 
