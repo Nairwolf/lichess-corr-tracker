@@ -161,8 +161,15 @@ export function renderCalendar(byDay: Map<string, Game[]>, since: Date, today: D
   return years.join('');
 }
 
-const CHART = { height: 220, top: 12, right: 44, bottom: 26, left: 36 };
+const CHART = { height: 240, top: 28, right: 44, bottom: 26, left: 36 };
 const MIN_TICK_GAP = 44;
+// Keeps the elo line off the plot edges, even when it is flat.
+const RATING_PAD = 10;
+
+export interface Series {
+  ongoing: boolean;
+  rating: boolean;
+}
 
 function niceStep(max: number): number {
   const raw = max / 4;
@@ -170,84 +177,145 @@ function niceStep(max: number): number {
   return Math.max(1, [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= raw)!);
 }
 
-export function chartScale(points: DayCount[], width: number) {
+// Uses the same number of intervals as the left axis, so both axes share the grid lines.
+function ratingAxis(min: number, max: number, ticks: number) {
+  for (let pow = 1; ; pow *= 10) {
+    for (const m of [1, 2, 5]) {
+      const step = m * pow;
+      const lo = Math.floor(min / step) * step;
+      if (lo + ticks * step >= max) return { lo, step };
+    }
+  }
+}
+
+export function chartScale(points: DayCount[], width: number, series: Series) {
   const n = points.length;
   const plotW = Math.max(width - CHART.left - CHART.right, 1);
   const plotH = CHART.height - CHART.top - CHART.bottom;
-  const step = niceStep(Math.max(1, ...points.map((p) => p.count)));
-  const yMax = Math.ceil(Math.max(1, ...points.map((p) => p.count)) / step) * step;
+  const maxCount = Math.max(1, ...points.map((p) => p.count));
+  const step = niceStep(maxCount);
+  const yMax = Math.ceil(maxCount / step) * step;
+  const ticks = series.ongoing ? yMax / step : 4;
+  const ratings = points.flatMap((p) => (p.rating === undefined ? [] : [p.rating]));
+  const rating = series.rating && ratings.length ? ratingAxis(Math.min(...ratings) - RATING_PAD, Math.max(...ratings) + RATING_PAD, ticks) : undefined;
   const dx = n > 1 ? plotW / (n - 1) : 0;
+  const fy = (f: number) => CHART.top + plotH * (1 - f);
   return {
     step,
-    yMax,
+    ticks,
+    rating,
     x: (i: number) => CHART.left + (n > 1 ? i * dx : plotW),
-    y: (v: number) => CHART.top + plotH * (1 - v / yMax),
+    y: (v: number) => fy(v / yMax),
+    yRating: (v: number) => fy(rating ? (v - rating.lo) / (rating.step * ticks) : 0),
+    tickY: (i: number) => fy(i / ticks),
     indexAt: (px: number) => (n > 1 ? Math.min(n - 1, Math.max(0, Math.round((px - CHART.left) / dx))) : 0),
   };
 }
 
 export const fmtLongDate = (d: Date) => longDateFmt.format(d);
 
-export function renderOngoingChart(points: DayCount[], width: number): string {
+export function renderSeriesToggles(series: Series): string {
+  const labels: Record<keyof Series, string> = { ongoing: 'Parties en cours', rating: 'Elo' };
+  const shown = Object.values(series).filter(Boolean).length;
+  return (Object.keys(labels) as (keyof Series)[])
+    .map((k) => {
+      const locked = series[k] && shown === 1 ? ' aria-disabled="true" title="Au moins une courbe reste affichée"' : '';
+      return `<button data-series="${k}" class="${k}${series[k] ? ' active' : ''}" aria-pressed="${series[k]}"${locked}><i></i>${labels[k]}</button>`;
+    })
+    .join('');
+}
+
+const signed = (n: number) => (n ? `${n > 0 ? '+' : ''}${n}` : '±0');
+
+export function renderOngoingChart(points: DayCount[], width: number, series: Series, ratingsFromLichess: boolean): string {
   if (!points.length || width <= 0) return '';
-  const { step, yMax, x, y } = chartScale(points, width);
+  const { step, ticks, rating, x, y, yRating, tickY } = chartScale(points, width, series);
   const right = width - CHART.right;
-  const base = y(0);
+  const base = tickY(0);
 
   const grid: string[] = [];
-  for (let v = 0; v <= yMax; v += step) {
-    grid.push(`<line class="grid-line" x1="${CHART.left}" x2="${right}" y1="${y(v)}" y2="${y(v)}"/>
-      <text class="tick" x="${CHART.left - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`);
+  for (let i = 0; i <= ticks; i++) {
+    const gy = tickY(i);
+    grid.push(`<line class="grid-line" x1="${CHART.left}" x2="${right}" y1="${gy}" y2="${gy}"/>`);
+    if (series.ongoing) grid.push(`<text class="tick" x="${CHART.left - 8}" y="${gy + 4}" text-anchor="end">${i * step}</text>`);
+    if (rating) grid.push(`<text class="tick" x="${right + 8}" y="${gy + 4}">${rating.lo + i * rating.step}</text>`);
   }
+  const titles: string[] = [];
+  if (series.ongoing) titles.push(`<line class="key" x1="1" x2="13" y1="9" y2="9"/><text class="axis-title" x="18" y="13">parties en cours</text>`);
+  if (rating) titles.push(`<line class="key rating" x1="${width - 13}" x2="${width - 1}" y1="9" y2="9"/>
+    <text class="axis-title" x="${width - 18}" y="13" text-anchor="end">elo</text>`);
 
   const first = points[0].day;
   const last = points.at(-1)!.day;
   const pxPerMonth = (right - CHART.left) / Math.max(points.length / 30.44, 1);
-  const every = [1, 2, 3, 6, 12].find((m) => m * pxPerMonth >= MIN_TICK_GAP) ?? 12;
+  const every = [1, 2, 3, 6, 12, 24, 60].find((m) => m * pxPerMonth >= MIN_TICK_GAP) ?? 120;
   const index = (d: Date) => Math.round((+d - +first) / DAY_MS);
   const months: string[] = [];
   for (let d = new Date(first.getFullYear(), first.getMonth() + 1, 1); d <= last; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
-    if (d.getMonth() % every) continue;
+    if ((d.getFullYear() * 12 + d.getMonth()) % every) continue;
     const label = d.getMonth() === 0 ? String(d.getFullYear()) : monthFmt.format(d);
     const cx = x(index(d));
     months.push(`<line class="axis" x1="${cx}" x2="${cx}" y1="${base}" y2="${base + 4}"/>
       <text class="tick${d.getMonth() === 0 ? ' year-tick' : ''}" x="${cx}" y="${base + 18}" text-anchor="middle">${label}</text>`);
   }
 
-  let line = `M${x(0)},${y(points[0].count)}`;
-  for (let i = 1; i < points.length; i++) line += `H${x(i)}V${y(points[i].count)}`;
-  const area = `${line}V${base}H${x(0)}Z`;
   const end = points.at(-1)!;
   const endX = x(points.length - 1);
-  const endY = y(end.count);
+  const marks: string[] = [];
+  const stats: string[] = [];
+  const notes: string[] = [];
 
-  const max = points.reduce((best, p) => (p.count > best.count ? p : best));
-  const avg = points.reduce((sum, p) => sum + p.count, 0) / points.length;
-
-  return `
-    <div class="chart-stats">
-      Aujourd'hui <strong>${end.count}</strong>
+  if (series.ongoing) {
+    let line = `M${x(0)},${y(points[0].count)}`;
+    for (let i = 1; i < points.length; i++) line += `H${x(i)}V${y(points[i].count)}`;
+    marks.push(`<path class="area" d="${line}V${base}H${x(0)}Z"/><path class="line" d="${line}"/>
+      <circle class="dot" cx="${endX}" cy="${y(end.count)}" r="4"/>`);
+    // The right margin holds the elo axis when it is shown.
+    if (!rating) marks.push(`<text class="end-label" x="${endX + 10}" y="${y(end.count) + 4}">${end.count}</text>`);
+    const max = points.reduce((best, p) => (p.count > best.count ? p : best));
+    const avg = points.reduce((sum, p) => sum + p.count, 0) / points.length;
+    stats.push(`<div>Parties en cours : aujourd'hui <strong>${end.count}</strong>
       <span class="muted">·</span> maximum <strong>${max.count}</strong> <span class="muted">le ${fmtDate(max.day)}</span>
-      <span class="muted">·</span> moyenne <strong>${decimalFmt.format(avg)}</strong>
-    </div>
+      <span class="muted">·</span> moyenne <strong>${decimalFmt.format(avg)}</strong></div>`);
+    notes.push(`Nombre de parties en cours à la fin de chaque jour. Une partie terminée compte jusqu'à son dernier coup :
+      lichess ne donne pas la date de fin, donc une partie perdue au temps sort un peu trop tôt de la courbe.
+      Les parties commencées avant la période sont comptées tant qu'elles sont en cours.`);
+  }
+
+  if (rating) {
+    const rated = points.filter((p) => p.rating !== undefined);
+    const start = points.indexOf(rated[0]);
+    let line = `M${x(start)},${yRating(rated[0].rating!)}`;
+    for (let i = start + 1; i < points.length; i++) line += `H${x(i)}V${yRating(points[i].rating!)}`;
+    marks.push(`<path class="line rating" d="${line}"/><circle class="dot rating" cx="${endX}" cy="${yRating(end.rating!)}" r="4"/>`);
+    const best = rated.reduce((b, p) => (p.rating! > b.rating! ? p : b));
+    stats.push(`<div>Elo : aujourd'hui <strong>${end.rating}</strong> <span class="muted">(${signed(end.rating! - rated[0].rating!)} sur la période)</span>
+      <span class="muted">·</span> maximum <strong>${best.rating}</strong> <span class="muted">le ${fmtDate(best.day)}</span></div>`);
+    notes.push(
+      ratingsFromLichess
+        ? "L'elo est celui de lichess à la fin de chaque jour."
+        : "lichess ne fournit pas l'historique d'elo de ce compte : la courbe suit l'elo au début de chaque partie, puis l'elo actuel.",
+    );
+  }
+
+  const what = [series.ongoing && 'nombre de parties en cours', rating && 'elo'].filter(Boolean).join(' et ');
+  return `
+    <div class="chart-stats">${stats.join('')}</div>
     <svg class="chart" width="${width}" height="${CHART.height}" role="img"
-      aria-label="Nombre de parties en cours par jour, du ${fmtDate(first)} au ${fmtDate(last)}">
+      aria-label="${what[0].toUpperCase() + what.slice(1)} par jour, du ${fmtDate(first)} au ${fmtDate(last)}">
+      ${titles.join('')}
       ${grid.join('')}
       <line class="axis" x1="${CHART.left}" x2="${right}" y1="${base}" y2="${base}"/>
       ${months.join('')}
-      <path class="area" d="${area}"/>
-      <path class="line" d="${line}"/>
-      <circle class="dot" cx="${endX}" cy="${endY}" r="4"/>
-      <text class="end-label" x="${endX + 10}" y="${endY + 4}">${end.count}</text>
+      ${marks.join('')}
       <g class="hover" visibility="hidden">
         <line class="crosshair" y1="${CHART.top}" y2="${base}"/>
-        <circle class="dot" r="4"/>
+        ${series.ongoing ? '<circle class="dot ongoing" r="4"/>' : ''}
+        ${rating ? '<circle class="dot rating" r="4"/>' : ''}
       </g>
     </svg>
-    <div class="chart-tip" hidden><strong></strong><span></span></div>
-    <p class="muted note">Nombre de parties en cours à la fin de chaque jour. Une partie terminée compte jusqu'à son dernier coup :
-      lichess ne donne pas la date de fin, donc une partie perdue au temps sort un peu trop tôt de la courbe.
-      Les parties commencées avant la période sont comptées tant qu'elles sont en cours.</p>`;
+    <div class="chart-tip" hidden><strong class="ongoing"></strong><strong class="rating"></strong><span></span></div>
+    <p class="muted note">${notes.join(' ')}</p>`;
 }
 
 export function renderMissed(ranges: DayRange[]): string {

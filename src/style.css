@@ -14,6 +14,7 @@
   --l3: #9fd14a;
   --missed: #a33a2e;
   --empty: #2f2d2a;
+  --elo: #e0622e;
   --cell: 12px;
   --gap: 3px;
   color-scheme: dark;
@@ -32,6 +33,7 @@
     --l3: #4e8a1c;
     --missed: #e05a4a;
     --empty: #e8e4de;
+    --elo: #d95926;
     color-scheme: light;
   }
 }
@@ -380,6 +382,53 @@ i.missed {
   font-size: 12px;
   font-weight: 600;
 }
+.chart .line.rating {
+  stroke: var(--elo);
+}
+.chart .dot.rating {
+  fill: var(--elo);
+}
+.chart .key {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.chart .key.rating {
+  stroke: var(--elo);
+}
+.chart .axis-title {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.chart-stats div + div {
+  margin-top: 2px;
+}
+#chart-series button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+#chart-series button.active {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+#chart-series button[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+#chart-series i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+#chart-series .rating i {
+  background: var(--elo);
+}
+#chart-series button:not(.active) i {
+  opacity: 0.35;
+}
 .chart .crosshair {
   stroke: var(--muted);
   stroke-width: 1;
@@ -398,6 +447,9 @@ i.missed {
   font-size: 13px;
   white-space: nowrap;
   pointer-events: none;
+}
+.chart-tip[hidden] {
+  display: none;
 }
 .chart-tip span {
   color: var(--muted);

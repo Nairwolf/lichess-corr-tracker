@@ -1,3 +1,5 @@
+import { dayKey } from './stats';
+
 export type Color = 'white' | 'black';
 export type Result = 'win' | 'loss' | 'draw' | 'aborted';
 
@@ -50,6 +52,12 @@ export interface User {
   corrGames?: number;
 }
 
+// Rating at the end of a day where it changed (`day` is a YYYY-MM-DD key).
+export interface RatingPoint {
+  day: string;
+  rating: number;
+}
+
 export class LichessError extends Error {}
 
 const API = 'https://lichess.org/api';
@@ -73,6 +81,14 @@ export async function fetchUser(username: string, signal?: AbortSignal): Promise
   if (data.disabled) throw new LichessError('Ce compte lichess est fermé.');
   const corr = data.perfs?.correspondence;
   return { id: data.id, username: data.username, corrRating: corr?.rating, corrGames: corr?.games };
+}
+
+// Points are [year, month (0-based), day, rating], one per day where the rating changed.
+export async function fetchRatingHistory(user: User, signal?: AbortSignal): Promise<RatingPoint[]> {
+  const res = await get(`${API}/user/${encodeURIComponent(user.id)}/rating-history`, 'application/json', 'Utilisateur introuvable sur lichess.', signal);
+  const perfs: { name: string; points: [number, number, number, number][] }[] = await res.json();
+  const points = perfs.find((p) => p.name === 'correspondence')?.points ?? [];
+  return points.map(([y, m, d, rating]) => ({ day: dayKey(new Date(y, m, d)), rating }));
 }
 
 async function* streamNdjson<T = RawGame>(url: string, signal?: AbortSignal): AsyncGenerator<T> {

@@ -1,5 +1,5 @@
 import './style.css';
-import { LichessError, fetchGames, fetchUser, type Game, type User } from './lichess';
+import { LichessError, fetchGames, fetchRatingHistory, fetchUser, type Game, type RatingPoint, type User } from './lichess';
 import {
   PRESETS,
   computeStats,
@@ -9,6 +9,8 @@ import {
   ongoingByDay,
   parseDayKey,
   presetStart,
+  ratingsFromGames,
+  withRatings,
   type DayCount,
   type Preset,
 } from './stats';
@@ -21,11 +23,13 @@ import {
   renderCalendar,
   renderMissed,
   renderOngoingChart,
+  renderSeriesToggles,
   renderOldest,
   renderSummary,
   renderTable,
   thumbnailUrl,
   type Filter,
+  type Series,
   type Sort,
   type SortKey,
 } from './render';
@@ -34,12 +38,14 @@ interface Cached {
   version: 1;
   user: User;
   games: Game[];
+  ratings?: RatingPoint[];
   fetchedAt: number;
 }
 
 interface State {
   user?: User;
   games: Game[];
+  ratings?: RatingPoint[];
   fetchedAt?: number;
   loading?: number;
   error?: string;
@@ -53,6 +59,8 @@ let controller: AbortController | undefined;
 let periodGames: Game[] = [];
 let chartPoints: DayCount[] = [];
 let chartWidth = 0;
+let chartSeries: Series = { ongoing: true, rating: true };
+let ratingsFromLichess = true;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
@@ -62,6 +70,16 @@ const preview = $<HTMLImageElement>('preview');
 
 const cacheKey = (id: string) => `lch:games:${id}`;
 const sinceKey = (id: string) => `lch:since:${id}`;
+const SERIES_KEY = 'lch:chart-series';
+
+function readSeries(): Series {
+  try {
+    return { ongoing: true, rating: true, ...JSON.parse(localStorage.getItem(SERIES_KEY) ?? '{}') };
+  } catch {
+    return { ongoing: true, rating: true };
+  }
+}
+let series = readSeries();
 
 function readCache(id: string): Cached | undefined {
   try {
@@ -97,8 +115,8 @@ async function load(username: string, full = false) {
 
   if (state.user?.id !== id) Object.assign(state, { filter: 'all', day: undefined });
   Object.assign(state, { error: undefined, loading: 0 });
-  if (cached) Object.assign(state, { user: cached.user, games: cached.games, fetchedAt: cached.fetchedAt });
-  else Object.assign(state, { user: undefined, games: [], fetchedAt: undefined });
+  if (cached) Object.assign(state, { user: cached.user, games: cached.games, ratings: cached.ratings, fetchedAt: cached.fetchedAt });
+  else Object.assign(state, { user: undefined, games: [], ratings: undefined, fetchedAt: undefined });
   usernameInput.value = cached?.user.username ?? username;
   history.replaceState(null, '', `?u=${encodeURIComponent(id)}`);
   render();
@@ -106,21 +124,28 @@ async function load(username: string, full = false) {
   try {
     const user = await fetchUser(username, signal);
     const since = cached ? incrementalSince(cached.games) : undefined;
-    const fresh = await fetchGames(user, {
-      since,
-      signal,
-      onGame: (n) => {
-        state.loading = n;
-        renderStatus();
-      },
-    });
+    const [fresh, ratings] = await Promise.all([
+      fetchGames(user, {
+        since,
+        signal,
+        onGame: (n) => {
+          state.loading = n;
+          renderStatus();
+        },
+      }),
+      // The chart can do without the rating: keep the cached one rather than failing the whole load.
+      fetchRatingHistory(user, signal).catch((e) => {
+        if (signal.aborted) throw e;
+        return cached?.ratings;
+      }),
+    ]);
     const kept = since ? cached!.games.filter((g) => g.createdAt < since) : [];
     const freshIds = new Set(fresh.map((g) => g.id));
     const games = [...fresh, ...kept.filter((g) => !freshIds.has(g.id))].sort((a, b) => b.createdAt - a.createdAt);
     const fetchedAt = Date.now();
-    Object.assign(state, { user, games, fetchedAt, loading: undefined });
+    Object.assign(state, { user, games, ratings, fetchedAt, loading: undefined });
     usernameInput.value = user.username;
-    writeCache({ version: 1, user, games, fetchedAt });
+    writeCache({ version: 1, user, games, ratings, fetchedAt });
   } catch (e) {
     if (signal.aborted) return;
     state.loading = undefined;
@@ -200,15 +225,20 @@ function render() {
   sinceInput.max = dayKey(today);
   $('calendar').innerHTML = renderCalendar(byDay, since, today, state.day);
   $('missed').innerHTML = renderMissed(stats.missedRanges);
-  chartPoints = ongoingByDay(games, since, today, now);
+  ratingsFromLichess = !!state.ratings?.length;
+  const ratings = ratingsFromLichess ? state.ratings! : ratingsFromGames(games, user.corrRating, state.fetchedAt ?? now);
+  chartPoints = withRatings(ongoingByDay(games, since, today, now), ratings);
   renderChart();
   renderGames();
 }
 
 function renderChart() {
   const el = $('ongoing-chart');
+  const hasRatings = chartPoints.some((p) => p.rating !== undefined);
+  chartSeries = { ongoing: series.ongoing || !series.rating || !hasRatings, rating: series.rating && hasRatings };
+  $('chart-series').innerHTML = hasRatings ? renderSeriesToggles(chartSeries) : '';
   chartWidth = el.clientWidth;
-  el.innerHTML = renderOngoingChart(chartPoints, chartWidth);
+  el.innerHTML = renderOngoingChart(chartPoints, chartWidth, chartSeries, ratingsFromLichess);
 }
 
 function renderGames() {
@@ -260,6 +290,14 @@ document.addEventListener('click', (e) => {
     renderGames();
   }
 
+  const toggle = target.closest<HTMLElement>('[data-series]');
+  if (toggle && toggle.getAttribute('aria-disabled') !== 'true') {
+    const key = toggle.dataset.series as keyof Series;
+    series = { ...chartSeries, [key]: !chartSeries[key] };
+    localStorage.setItem(SERIES_KEY, JSON.stringify(series));
+    renderChart();
+  }
+
   const period = target.closest<HTMLElement>('[data-period]')?.dataset.period;
   if (period) setPeriod(period);
 
@@ -302,24 +340,36 @@ $('ongoing-chart').addEventListener('pointermove', (e) => {
   const hover = svg?.querySelector<SVGGElement>('.hover');
   const tip = el.querySelector<HTMLElement>('.chart-tip');
   if (!svg || !hover || !tip) return;
-  const scale = chartScale(chartPoints, chartWidth);
+  const scale = chartScale(chartPoints, chartWidth, chartSeries);
   const box = svg.getBoundingClientRect();
   const origin = el.getBoundingClientRect();
   const i = scale.indexAt(e.clientX - box.left);
   const p = chartPoints[i];
-  const x = scale.x(i);
-  const y = scale.y(p.count);
-  hover.querySelector('line')!.setAttribute('x1', String(x));
-  hover.querySelector('line')!.setAttribute('x2', String(x));
-  hover.querySelector('circle')!.setAttribute('cx', String(x));
-  hover.querySelector('circle')!.setAttribute('cy', String(y));
+  const x = String(scale.x(i));
+  const line = hover.querySelector('line')!;
+  line.setAttribute('x1', x);
+  line.setAttribute('x2', x);
+  const ys: number[] = [];
+  const place = (cls: 'ongoing' | 'rating', value: number | undefined, y: (v: number) => number, text: (v: number) => string) => {
+    const dot = hover.querySelector(`circle.${cls}`);
+    const row = tip.querySelector<HTMLElement>(`strong.${cls}`)!;
+    row.hidden = !dot || value === undefined;
+    if (!dot) return;
+    dot.setAttribute('display', value === undefined ? 'none' : 'inline');
+    if (value === undefined) return;
+    ys.push(y(value));
+    dot.setAttribute('cx', x);
+    dot.setAttribute('cy', String(y(value)));
+    row.textContent = text(value);
+  };
+  place('ongoing', p.count, scale.y, (n) => `${n} partie${n > 1 ? 's' : ''} en cours`);
+  place('rating', p.rating, scale.yRating, (r) => `${r} elo`);
   hover.setAttribute('visibility', 'visible');
-  tip.querySelector('strong')!.textContent = `${p.count} partie${p.count > 1 ? 's' : ''} en cours`;
   tip.querySelector('span')!.textContent = fmtLongDate(p.day);
   tip.hidden = false;
   const half = tip.offsetWidth / 2;
-  tip.style.left = `${Math.min(Math.max(box.left - origin.left + x, half), el.clientWidth - half)}px`;
-  tip.style.top = `${box.top - origin.top + y}px`;
+  tip.style.left = `${Math.min(Math.max(box.left - origin.left + scale.x(i), half), el.clientWidth - half)}px`;
+  tip.style.top = `${box.top - origin.top + Math.min(...ys, scale.tickY(0))}px`;
 });
 $('ongoing-chart').addEventListener('pointerleave', () => {
   $('ongoing-chart').querySelector<SVGGElement>('.hover')?.setAttribute('visibility', 'hidden');

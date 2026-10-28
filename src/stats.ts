@@ -1,4 +1,4 @@
-import type { Game } from './lichess';
+import type { Game, RatingPoint } from './lichess';
 
 export const DAY_MS = 86_400_000;
 
@@ -107,6 +107,7 @@ export function computeStats(games: Game[], byDay: Map<string, Game[]>, since: D
 export interface DayCount {
   day: Date;
   count: number;
+  rating?: number;
 }
 
 // Snapshot at the end of each day (now for today). A finished game is considered over at its last move.
@@ -124,6 +125,27 @@ export function ongoingByDay(games: Game[], since: Date, today: Date, now: numbe
     points.push({ day, count: started - ended });
   }
   return points;
+}
+
+// Fallback when lichess returns no rating history: the rating each game started with, then the current one.
+export function ratingsFromGames(games: Game[], current: number | undefined, at: number): RatingPoint[] {
+  const points = games
+    .filter((g) => g.variant === 'standard' && g.myRating !== undefined)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((g) => ({ day: dayKey(g.createdAt), rating: g.myRating! }));
+  if (current !== undefined) points.push({ day: dayKey(at), rating: current });
+  return points;
+}
+
+// The rating holds between two changes; it is unknown before the first one.
+export function withRatings(points: DayCount[], history: RatingPoint[]): DayCount[] {
+  let i = 0;
+  let rating: number | undefined;
+  return points.map((p) => {
+    const key = dayKey(p.day);
+    while (i < history.length && history[i].day <= key) rating = history[i++].rating;
+    return { ...p, rating };
+  });
 }
 
 export const PRESETS = { '30d': '30 jours', '3m': '3 mois', '6m': '6 mois', year: 'Cette année', '12m': '12 mois', all: 'Tout' } as const;
