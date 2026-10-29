@@ -149,7 +149,7 @@ async function load(username: string, full = false) {
   } catch (e) {
     if (signal.aborted) return;
     state.loading = undefined;
-    state.error = e instanceof LichessError ? e.message : `Impossible de joindre lichess : ${(e as Error).message}`;
+    state.error = e instanceof LichessError ? e.message : `Couldn't reach lichess: ${(e as Error).message}`;
   }
   render();
 }
@@ -180,12 +180,12 @@ function renderStatus() {
     el.innerHTML = `<div class="error">${esc(state.error)}</div>`;
   } else if (state.loading !== undefined) {
     const n = state.loading;
-    el.innerHTML = `<div class="loading"><span class="spinner"></span>Chargement depuis lichess… ${n ? `${n} partie${n > 1 ? 's' : ''}` : ''}</div>`;
+    el.innerHTML = `<div class="loading"><span class="spinner"></span>Loading from lichess… ${n ? `${n} game${n > 1 ? 's' : ''}` : ''}</div>`;
   } else if (state.fetchedAt) {
-    const when = new Date(state.fetchedAt).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
-    el.innerHTML = `<div class="info">Données du ${when}
-      <button data-action="refresh">Rafraîchir</button>
-      <button data-action="full" class="secondary" title="Ignore le cache et retélécharge toutes les parties">Tout recharger</button></div>`;
+    const when = new Date(state.fetchedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    el.innerHTML = `<div class="info">Data as of ${when}
+      <button data-action="refresh">Refresh</button>
+      <button data-action="full" class="secondary" title="Ignores the cache and downloads every game again">Reload all</button></div>`;
   } else {
     el.innerHTML = '';
   }
@@ -201,7 +201,7 @@ function render() {
   content.hidden = !user || !since;
   if (!user || !since) {
     if (user && state.loading === undefined && !state.error) {
-      $('status').insertAdjacentHTML('beforeend', `<p class="muted">${esc(user.username)} n'a aucune partie par correspondance.</p>`);
+      $('status').insertAdjacentHTML('beforeend', `<p class="muted">${esc(user.username)} has no correspondence games.</p>`);
     }
     return;
   }
@@ -217,7 +217,7 @@ function render() {
 
   const elo = user.corrRating ? ` · ${user.corrRating} elo` : '';
   $('user-title').innerHTML = `<a href="https://lichess.org/@/${esc(user.id)}" target="_blank" rel="noopener">${esc(user.username)}</a>
-    <span class="muted">${elo} · ${stats.total} partie${stats.total > 1 ? 's' : ''}</span>`;
+    <span class="muted">${elo} · ${stats.total} game${stats.total === 1 ? '' : 's'}</span>`;
   $('summary').innerHTML = renderSummary(stats);
   $('oldest').innerHTML = renderOldest(stats.oldestOngoing, now);
   sinceInput.value = dayKey(since);
@@ -248,12 +248,12 @@ function renderGames() {
     myturn: filterGames(periodGames, 'myturn').length,
     finished: filterGames(periodGames, 'finished').length,
   };
-  const labels: Record<Filter, string> = { all: 'Toutes', ongoing: 'En cours', myturn: 'À toi de jouer', finished: 'Terminées' };
+  const labels: Record<Filter, string> = { all: 'All', ongoing: 'Ongoing', myturn: 'Your turn', finished: 'Finished' };
   $('filters').innerHTML = (Object.keys(labels) as Filter[])
     .map((f) => `<button data-filter="${f}" class="${state.filter === f ? 'active' : ''}">${labels[f]} <span class="count">${counts[f]}</span></button>`)
     .join('');
   $('day-filter').innerHTML = state.day
-    ? `<span class="chip">Parties démarrées le ${fmtDate(parseDayKey(state.day))} <button data-action="clear-day" title="Retirer le filtre">×</button></span>`
+    ? `<span class="chip">Games started on ${fmtDate(parseDayKey(state.day))} <button data-action="clear-day" title="Remove filter">×</button></span>`
     : '';
   $('table').innerHTML = renderTable(filterGames(periodGames, state.filter, state.day), state.sort, Date.now());
 }
@@ -362,7 +362,7 @@ $('ongoing-chart').addEventListener('pointermove', (e) => {
     dot.setAttribute('cy', String(y(value)));
     row.textContent = text(value);
   };
-  place('ongoing', p.count, scale.y, (n) => `${n} partie${n > 1 ? 's' : ''} en cours`);
+  place('ongoing', p.count, scale.y, (n) => `${n} ongoing game${n === 1 ? '' : 's'}`);
   place('rating', p.rating, scale.yRating, (r) => `${r} elo`);
   hover.setAttribute('visibility', 'visible');
   tip.querySelector('span')!.textContent = fmtLongDate(p.day);

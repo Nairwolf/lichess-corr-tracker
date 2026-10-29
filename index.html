@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lichess-corr-tracker — parties par correspondance</title>
+    <title>lichess-corr-tracker — correspondence games</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>" />
   </head>
   <body>
     <header>
-      <h1><span class="logo">♞</span> Parties par correspondance</h1>
+      <h1><span class="logo">♞</span> Correspondence games</h1>
       <form id="form">
-        <input id="username" placeholder="Pseudo lichess" required autocomplete="off" spellcheck="false" />
-        <button type="submit">Afficher</button>
+        <input id="username" placeholder="lichess username" required autocomplete="off" spellcheck="false" />
+        <button type="submit">Show</button>
       </form>
     </header>
 
@@ -22,31 +22,31 @@
         <h2 id="user-title"></h2>
         <div class="period">
           <div id="presets" class="filters"></div>
-          <label id="custom-period">ou depuis le <input type="date" id="since" /></label>
+          <label id="custom-period">or since <input type="date" id="since" /></label>
         </div>
         <div class="cards" id="summary"></div>
       </section>
 
       <section>
-        <h2>Plus vieille partie en cours</h2>
+        <h2>Oldest ongoing game</h2>
         <div id="oldest"></div>
       </section>
 
       <section>
-        <h2>Une partie par jour ?</h2>
+        <h2>A game a day?</h2>
         <div class="legend">
-          <i class="missed"></i> manqué
+          <i class="missed"></i> missed
           <i class="l1"></i> 1 <i class="l2"></i> 2 <i class="l3"></i> 3+
-          <span class="muted">— clique sur un jour pour voir ses parties</span>
+          <span class="muted">— click a day to see its games</span>
         </div>
         <div id="calendar"></div>
-        <h3>Jours manqués</h3>
+        <h3>Missed days</h3>
         <div id="missed"></div>
       </section>
 
       <section>
         <div class="section-head">
-          <h2>Parties en cours et elo au fil du temps</h2>
+          <h2>Ongoing games and elo over time</h2>
           <div id="chart-series" class="filters"></div>
         </div>
         <div id="ongoing-chart"></div>
@@ -54,7 +54,7 @@
 
       <section id="games">
         <div class="section-head">
-          <h2>Parties</h2>
+          <h2>Games</h2>
           <div id="filters" class="filters"></div>
         </div>
         <div id="day-filter"></div>

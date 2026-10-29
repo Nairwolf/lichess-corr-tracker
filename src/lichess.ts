@@ -70,29 +70,29 @@ const KEPT_PLIES = 5;
 async function get(url: string, accept: string, notFound: string, signal?: AbortSignal): Promise<Response> {
   const res = await fetch(url, { headers: { Accept: accept }, signal });
   if (res.status === 404) throw new LichessError(notFound);
-  if (res.status === 429) throw new LichessError('Trop de requêtes : lichess demande de patienter une minute.');
-  if (!res.ok) throw new LichessError(`Erreur lichess (HTTP ${res.status}).`);
+  if (res.status === 429) throw new LichessError('Too many requests: lichess asks to wait a minute.');
+  if (!res.ok) throw new LichessError(`lichess error (HTTP ${res.status}).`);
   return res;
 }
 
 export async function fetchUser(username: string, signal?: AbortSignal): Promise<User> {
-  const res = await get(`${API}/user/${encodeURIComponent(username)}`, 'application/json', 'Utilisateur introuvable sur lichess.', signal);
+  const res = await get(`${API}/user/${encodeURIComponent(username)}`, 'application/json', 'User not found on lichess.', signal);
   const data = await res.json();
-  if (data.disabled) throw new LichessError('Ce compte lichess est fermé.');
+  if (data.disabled) throw new LichessError('This lichess account is closed.');
   const corr = data.perfs?.correspondence;
   return { id: data.id, username: data.username, corrRating: corr?.rating, corrGames: corr?.games };
 }
 
 // Points are [year, month (0-based), day, rating], one per day where the rating changed.
 export async function fetchRatingHistory(user: User, signal?: AbortSignal): Promise<RatingPoint[]> {
-  const res = await get(`${API}/user/${encodeURIComponent(user.id)}/rating-history`, 'application/json', 'Utilisateur introuvable sur lichess.', signal);
+  const res = await get(`${API}/user/${encodeURIComponent(user.id)}/rating-history`, 'application/json', 'User not found on lichess.', signal);
   const perfs: { name: string; points: [number, number, number, number][] }[] = await res.json();
   const points = perfs.find((p) => p.name === 'correspondence')?.points ?? [];
   return points.map(([y, m, d, rating]) => ({ day: dayKey(new Date(y, m, d)), rating }));
 }
 
 async function* streamNdjson<T = RawGame>(url: string, signal?: AbortSignal): AsyncGenerator<T> {
-  const res = await get(url, 'application/x-ndjson', "lichess a refusé l'export des parties (404).", signal);
+  const res = await get(url, 'application/x-ndjson', 'lichess refused the game export (404).', signal);
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = '';
   for (;;) {
@@ -129,7 +129,7 @@ function normalize(raw: RawGame, userId: string): Game {
     status: raw.status,
     ongoing,
     color,
-    opponent: opp.user?.name ?? (opp.aiLevel ? `Stockfish niv. ${opp.aiLevel}` : 'Anonyme'),
+    opponent: opp.user?.name ?? (opp.aiLevel ? `Stockfish level ${opp.aiLevel}` : 'Anonymous'),
     opponentTitle: opp.user?.title,
     opponentRating: opp.rating,
     myRating: me.rating,
@@ -166,7 +166,7 @@ async function fetchLivePosition(id: string, signal?: AbortSignal): Promise<{ to
     clearTimeout(timer);
     signal?.removeEventListener('abort', abort);
   }
-  if (!fen) throw new LichessError(`Position introuvable pour la partie ${id}.`);
+  if (!fen) throw new LichessError(`Position not found for game ${id}.`);
   return { toMove: fen.split(' ')[1] === 'b' ? 'black' : 'white', plies };
 }
 

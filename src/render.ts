@@ -9,44 +9,44 @@ export interface Sort {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  mate: 'mat',
-  resign: 'abandon',
-  outoftime: 'temps écoulé',
-  timeout: 'victoire réclamée',
-  stalemate: 'pat',
-  draw: 'nulle',
-  insufficientMaterialClaim: 'matériel insuffisant',
-  cheat: 'triche',
-  variantEnd: 'fin de variante',
-  aborted: 'annulée',
-  noStart: 'jamais commencée',
+  mate: 'checkmate',
+  resign: 'resignation',
+  outoftime: 'out of time',
+  timeout: 'victory claimed',
+  stalemate: 'stalemate',
+  draw: 'draw',
+  insufficientMaterialClaim: 'insufficient material',
+  cheat: 'cheating',
+  variantEnd: 'variant end',
+  aborted: 'aborted',
+  noStart: 'never started',
 };
 
-const RESULT_LABELS = { win: 'Victoire', loss: 'Défaite', draw: 'Nulle', aborted: 'Annulée' } as const;
+const RESULT_LABELS = { win: 'Win', loss: 'Loss', draw: 'Draw', aborted: 'Aborted' } as const;
 
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-const dateFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-const longDateFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-const timeFmt = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
-const monthFmt = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
+const dateFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const longDateFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
+const monthFmt = new Intl.DateTimeFormat('en-GB', { month: 'short' });
 
 export const fmtDate = (d: Date | number) => dateFmt.format(d);
-const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
+const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 const days = (ms: number) => Math.floor(ms / DAY_MS);
 
 function ago(ts: number, now: number): string {
   const d = days(now - ts);
-  if (d === 0) return "aujourd'hui";
-  if (d === 1) return 'hier';
-  return d < 30 ? `il y a ${d} j` : fmtDate(ts);
+  if (d === 0) return 'today';
+  if (d === 1) return 'yesterday';
+  return d < 30 ? `${d}d ago` : fmtDate(ts);
 }
 
 const duration = (g: Game, now: number) => (g.ongoing ? now : g.lastMoveAt) - g.createdAt;
 const pace = (g: Game, now: number) => fullMoves(g) / Math.max(duration(g, now) / DAY_MS, 1);
-const decimalFmt = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const decimalFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const gameUrl = (g: Game) => `https://lichess.org/${g.id}${g.color === 'black' ? '/black' : ''}`;
 export const thumbnailUrl = (id: string) => `https://lichess1.org/game/export/gif/thumbnail/${id}.gif`;
 
@@ -58,10 +58,10 @@ function opponentHtml(g: Game): string {
 
 function stateHtml(g: Game): string {
   if (g.ongoing) {
-    if (g.myTurn === null) return '<span class="badge waiting" title="Trait inconnu">En cours</span>';
+    if (g.myTurn === null) return '<span class="badge waiting" title="Side to move unknown">Ongoing</span>';
     return g.myTurn
-      ? '<span class="badge myturn">À toi de jouer</span>'
-      : '<span class="badge waiting">En attente</span>';
+      ? '<span class="badge myturn">Your turn</span>'
+      : '<span class="badge waiting">Waiting</span>';
   }
   const detail = STATUS_LABELS[g.status] ?? g.status;
   const diff = g.ratingDiff ? ` <span class="muted">${g.ratingDiff > 0 ? '+' : ''}${g.ratingDiff}</span>` : '';
@@ -73,40 +73,40 @@ export function renderSummary(s: Stats): string {
     `<div class="card ${cls}"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
   const finished = s.wins + s.draws + s.losses;
   const score = finished ? Math.round(((s.wins + s.draws / 2) / finished) * 100) : 0;
-  const percent = (n: number, total: number) => (total ? ` (${Math.round((n / total) * 100)}&nbsp;%)` : '');
+  const percent = (n: number, total: number) => (total ? ` (${Math.round((n / total) * 100)}%)` : '');
   return [
-    card('Série en cours', plural(s.currentStreak, 'jour'), `record : ${plural(s.longestStreak, 'jour')}`),
+    card('Current streak', plural(s.currentStreak, 'day'), `longest: ${plural(s.longestStreak, 'day')}`),
     card(
-      'Jours manqués',
+      'Missed days',
       String(s.missedCount),
-      `sur ${plural(s.analysedDays, 'jour')}${percent(s.missedCount, s.analysedDays)}`,
+      `out of ${plural(s.analysedDays, 'day')}${percent(s.missedCount, s.analysedDays)}`,
       s.missedCount ? 'bad' : 'good',
     ),
     card(
-      'Perdues au temps',
+      'Lost on time',
       String(s.timeoutLosses),
-      `sur ${plural(s.losses, 'défaite')}${percent(s.timeoutLosses, s.losses)}`,
+      `out of ${plural(s.losses, 'loss', 'losses')}${percent(s.timeoutLosses, s.losses)}`,
       s.timeoutLosses ? 'bad' : 'good',
     ),
-    card('En cours', String(s.ongoing), `dont ${s.myTurn} à toi de jouer`),
-    card('Bilan', `${s.wins} / ${s.draws} / ${s.losses}`, `V / N / D — score ${score} %`),
+    card('Ongoing', String(s.ongoing), `your turn in ${s.myTurn}`),
+    card('Record', `${s.wins} / ${s.draws} / ${s.losses}`, `W / D / L — score ${score}%`),
     card(
-      'Coups en moyenne',
+      'Average moves',
       s.avgMoves === undefined ? '—' : decimalFmt.format(s.avgMoves),
-      `sur ${finished} terminée${finished > 1 ? 's' : ''}`,
+      `over ${plural(finished, 'finished game')}`,
     ),
   ].join('');
 }
 
 export function renderOldest(g: Game | undefined, now: number): string {
-  if (!g) return '<p class="muted">Aucune partie en cours.</p>';
+  if (!g) return '<p class="muted">No ongoing games.</p>';
   return `
     <a class="oldest" href="${gameUrl(g)}" target="_blank" rel="noopener">
       <img src="${thumbnailUrl(g.id)}" alt="" width="180" height="180">
       <div>
-        <div class="big">${plural(days(now - g.createdAt), 'jour')}</div>
-        <div>contre ${opponentHtml(g)}, avec les ${g.color === 'white' ? 'blancs' : 'noirs'}</div>
-        <div class="muted">commencée le ${fmtDate(g.createdAt)} · ${plural(fullMoves(g), 'coup')} · dernier coup ${ago(g.lastMoveAt, now)}</div>
+        <div class="big">${plural(days(now - g.createdAt), 'day')}</div>
+        <div>against ${opponentHtml(g)}, as ${g.color}</div>
+        <div class="muted">started ${fmtDate(g.createdAt)} · ${plural(fullMoves(g), 'move')} · last move ${ago(g.lastMoveAt, now)}</div>
         <div>${stateHtml(g)}</div>
       </div>
     </a>`;
@@ -139,7 +139,7 @@ export function renderCalendar(byDay: Map<string, Game[]>, since: Date, today: D
       const isToday = key === dayKey(today);
       started += count;
       if (count === 0 && !isToday) missed++;
-      const title = `${longDateFmt.format(d)} — ${count ? plural(count, 'partie') : 'aucune partie'}`;
+      const title = `${longDateFmt.format(d)} — ${count ? plural(count, 'game') : 'no games'}`;
       const sel = key === selectedDay ? ' selected' : '';
       cells.push(`<i class="${cellClass(count)}${sel}" data-day="${key}" title="${title}"></i>`);
     }
@@ -153,7 +153,7 @@ export function renderCalendar(byDay: Map<string, Game[]>, since: Date, today: D
 
     years.push(`
       <div class="year">
-        <h3>${year} <span class="muted">— ${plural(started, 'partie')}, ${plural(missed, 'jour')} manqué${missed > 1 ? 's' : ''}</span></h3>
+        <h3>${year} <span class="muted">— ${plural(started, 'game')}, ${plural(missed, 'missed day')}</span></h3>
         <div class="months">${months.join('')}</div>
         <div class="grid">${cells.join('')}</div>
       </div>`);
@@ -215,11 +215,11 @@ export function chartScale(points: DayCount[], width: number, series: Series) {
 export const fmtLongDate = (d: Date) => longDateFmt.format(d);
 
 export function renderSeriesToggles(series: Series): string {
-  const labels: Record<keyof Series, string> = { ongoing: 'Parties en cours', rating: 'Elo' };
+  const labels: Record<keyof Series, string> = { ongoing: 'Ongoing games', rating: 'Elo' };
   const shown = Object.values(series).filter(Boolean).length;
   return (Object.keys(labels) as (keyof Series)[])
     .map((k) => {
-      const locked = series[k] && shown === 1 ? ' aria-disabled="true" title="Au moins une courbe reste affichée"' : '';
+      const locked = series[k] && shown === 1 ? ' aria-disabled="true" title="At least one curve stays visible"' : '';
       return `<button data-series="${k}" class="${k}${series[k] ? ' active' : ''}" aria-pressed="${series[k]}"${locked}><i></i>${labels[k]}</button>`;
     })
     .join('');
@@ -241,7 +241,7 @@ export function renderOngoingChart(points: DayCount[], width: number, series: Se
     if (rating) grid.push(`<text class="tick" x="${right + 8}" y="${gy + 4}">${rating.lo + i * rating.step}</text>`);
   }
   const titles: string[] = [];
-  if (series.ongoing) titles.push(`<line class="key" x1="1" x2="13" y1="9" y2="9"/><text class="axis-title" x="18" y="13">parties en cours</text>`);
+  if (series.ongoing) titles.push(`<line class="key" x1="1" x2="13" y1="9" y2="9"/><text class="axis-title" x="18" y="13">ongoing games</text>`);
   if (rating) titles.push(`<line class="key rating" x1="${width - 13}" x2="${width - 1}" y1="9" y2="9"/>
     <text class="axis-title" x="${width - 18}" y="13" text-anchor="end">elo</text>`);
 
@@ -274,12 +274,12 @@ export function renderOngoingChart(points: DayCount[], width: number, series: Se
     if (!rating) marks.push(`<text class="end-label" x="${endX + 10}" y="${y(end.count) + 4}">${end.count}</text>`);
     const max = points.reduce((best, p) => (p.count > best.count ? p : best));
     const avg = points.reduce((sum, p) => sum + p.count, 0) / points.length;
-    stats.push(`<div>Parties en cours : aujourd'hui <strong>${end.count}</strong>
-      <span class="muted">·</span> maximum <strong>${max.count}</strong> <span class="muted">le ${fmtDate(max.day)}</span>
-      <span class="muted">·</span> moyenne <strong>${decimalFmt.format(avg)}</strong></div>`);
-    notes.push(`Nombre de parties en cours à la fin de chaque jour. Une partie terminée compte jusqu'à son dernier coup :
-      lichess ne donne pas la date de fin, donc une partie perdue au temps sort un peu trop tôt de la courbe.
-      Les parties commencées avant la période sont comptées tant qu'elles sont en cours.`);
+    stats.push(`<div>Ongoing games: today <strong>${end.count}</strong>
+      <span class="muted">·</span> peak <strong>${max.count}</strong> <span class="muted">on ${fmtDate(max.day)}</span>
+      <span class="muted">·</span> average <strong>${decimalFmt.format(avg)}</strong></div>`);
+    notes.push(`Number of ongoing games at the end of each day. A finished game counts until its last move:
+      lichess doesn't give the end date, so a game lost on time leaves the curve a little too early.
+      Games started before the period are counted for as long as they are ongoing.`);
   }
 
   if (rating) {
@@ -289,20 +289,20 @@ export function renderOngoingChart(points: DayCount[], width: number, series: Se
     for (let i = start + 1; i < points.length; i++) line += `H${x(i)}V${yRating(points[i].rating!)}`;
     marks.push(`<path class="line rating" d="${line}"/><circle class="dot rating" cx="${endX}" cy="${yRating(end.rating!)}" r="4"/>`);
     const best = rated.reduce((b, p) => (p.rating! > b.rating! ? p : b));
-    stats.push(`<div>Elo : aujourd'hui <strong>${end.rating}</strong> <span class="muted">(${signed(end.rating! - rated[0].rating!)} sur la période)</span>
-      <span class="muted">·</span> maximum <strong>${best.rating}</strong> <span class="muted">le ${fmtDate(best.day)}</span></div>`);
+    stats.push(`<div>Elo: today <strong>${end.rating}</strong> <span class="muted">(${signed(end.rating! - rated[0].rating!)} over the period)</span>
+      <span class="muted">·</span> peak <strong>${best.rating}</strong> <span class="muted">on ${fmtDate(best.day)}</span></div>`);
     notes.push(
       ratingsFromLichess
-        ? "L'elo est celui de lichess à la fin de chaque jour."
-        : "lichess ne fournit pas l'historique d'elo de ce compte : la courbe suit l'elo au début de chaque partie, puis l'elo actuel.",
+        ? 'The elo is the lichess rating at the end of each day.'
+        : "lichess doesn't provide this account's elo history: the curve follows the elo at the start of each game, then the current elo.",
     );
   }
 
-  const what = [series.ongoing && 'nombre de parties en cours', rating && 'elo'].filter(Boolean).join(' et ');
+  const what = [series.ongoing && 'number of ongoing games', rating && 'elo'].filter(Boolean).join(' and ');
   return `
     <div class="chart-stats">${stats.join('')}</div>
     <svg class="chart" width="${width}" height="${CHART.height}" role="img"
-      aria-label="${what[0].toUpperCase() + what.slice(1)} par jour, du ${fmtDate(first)} au ${fmtDate(last)}">
+      aria-label="${what[0].toUpperCase() + what.slice(1)} per day, from ${fmtDate(first)} to ${fmtDate(last)}">
       ${titles.join('')}
       ${grid.join('')}
       <line class="axis" x1="${CHART.left}" x2="${right}" y1="${base}" y2="${base}"/>
@@ -319,14 +319,14 @@ export function renderOngoingChart(points: DayCount[], width: number, series: Se
 }
 
 export function renderMissed(ranges: DayRange[]): string {
-  if (!ranges.length) return '<p class="good-text">Aucun jour manqué sur la période. Bravo !</p>';
+  if (!ranges.length) return '<p class="good-text">No missed days in this period. Well done!</p>';
   const MAX = 60;
   const chips = ranges.slice(0, MAX).map(({ from, to }) => {
     const n = Math.round((+to - +from) / DAY_MS) + 1;
-    const label = n === 1 ? fmtDate(from) : `${fmtDate(from)} → ${fmtDate(to)} <span class="muted">(${n} j)</span>`;
+    const label = n === 1 ? fmtDate(from) : `${fmtDate(from)} → ${fmtDate(to)} <span class="muted">(${n} days)</span>`;
     return `<li>${label}</li>`;
   });
-  if (ranges.length > MAX) chips.push(`<li class="more">… et ${ranges.length - MAX} autres périodes</li>`);
+  if (ranges.length > MAX) chips.push(`<li class="more">… and ${plural(ranges.length - MAX, 'more period')}</li>`);
   return `<ul class="missed-list">${chips.join('')}</ul>`;
 }
 
@@ -354,15 +354,15 @@ function sortValue(g: Game, key: SortKey, now: number): number | string {
 }
 
 const COLUMNS: [SortKey, string][] = [
-  ['createdAt', 'Début'],
-  ['opponent', 'Adversaire'],
-  ['color', 'Couleur'],
-  ['state', 'État'],
-  ['plies', 'Coups'],
-  ['pace', 'Coups/jour'],
-  ['daysPerTurn', 'Cadence'],
-  ['lastMoveAt', 'Dernier coup'],
-  ['duration', 'Durée'],
+  ['createdAt', 'Started'],
+  ['opponent', 'Opponent'],
+  ['color', 'Color'],
+  ['state', 'Status'],
+  ['plies', 'Moves'],
+  ['pace', 'Moves/day'],
+  ['daysPerTurn', 'Time control'],
+  ['lastMoveAt', 'Last move'],
+  ['duration', 'Duration'],
 ];
 
 export function filterGames(games: Game[], filter: Filter, day?: string): Game[] {
@@ -376,7 +376,7 @@ export function filterGames(games: Game[], filter: Filter, day?: string): Game[]
 }
 
 export function renderTable(games: Game[], sort: Sort, now: number): string {
-  if (!games.length) return '<p class="muted">Aucune partie.</p>';
+  if (!games.length) return '<p class="muted">No games.</p>';
   const sorted = [...games].sort((a, b) => {
     const va = sortValue(a, sort.key, now);
     const vb = sortValue(b, sort.key, now);
@@ -389,19 +389,19 @@ export function renderTable(games: Game[], sort: Sort, now: number): string {
   }).join('');
 
   const rows = sorted.map((g) => {
-    const cadence = g.daysPerTurn ? `${g.daysPerTurn} j/coup` : '∞';
+    const cadence = g.daysPerTurn ? `${g.daysPerTurn}d/move` : '∞';
     const variant = g.variant !== 'standard' ? ` <span class="muted">${esc(g.variant)}</span>` : '';
     return `
       <tr data-id="${g.id}" data-url="${gameUrl(g)}" class="${g.ongoing ? 'ongoing' : ''}">
         <td>${fmtDate(g.createdAt)} <span class="muted">${timeFmt.format(g.createdAt)}</span></td>
-        <td><a href="${gameUrl(g)}" target="_blank" rel="noopener">${opponentHtml(g)}</a>${variant}${g.rated ? '' : ' <span class="muted">amicale</span>'}</td>
+        <td><a href="${gameUrl(g)}" target="_blank" rel="noopener">${opponentHtml(g)}</a>${variant}${g.rated ? '' : ' <span class="muted">casual</span>'}</td>
         <td><span class="piece ${g.color}"></span></td>
         <td>${stateHtml(g)}</td>
         <td class="num">${fullMoves(g)}</td>
         <td class="num">${decimalFmt.format(pace(g, now))}</td>
         <td>${cadence}</td>
         <td>${ago(g.lastMoveAt, now)}</td>
-        <td class="num">${days(duration(g, now))} j</td>
+        <td class="num">${days(duration(g, now))}d</td>
       </tr>`;
   });
 

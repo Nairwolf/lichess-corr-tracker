@@ -148,7 +148,7 @@ export function withRatings(points: DayCount[], history: RatingPoint[]): DayCoun
   });
 }
 
-export const PRESETS = { '30d': '30 jours', '3m': '3 mois', '6m': '6 mois', year: 'Cette année', '12m': '12 mois', all: 'Tout' } as const;
+export const PRESETS = { '30d': '30 days', '3m': '3 months', '6m': '6 months', year: 'This year', '12m': '12 months', all: 'All' } as const;
 export type Preset = keyof typeof PRESETS;
 
 export const isPreset = (p: string): p is Preset => p in PRESETS;

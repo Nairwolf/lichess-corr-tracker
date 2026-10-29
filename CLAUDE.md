@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A local-only static web app (UI text in French) that shows a lichess user's correspondence games. Its purpose is to answer two questions: "did I start a game every day?" and "which is my oldest ongoing game?". Stack: Vite + TypeScript with the native DOM. There is no framework, no backend and no runtime dependency.
+A local-only static web app (UI text in English) that shows a lichess user's correspondence games. Its purpose is to answer two questions: "did I start a game every day?" and "which is my oldest ongoing game?". Stack: Vite + TypeScript with the native DOM. There is no framework, no backend and no runtime dependency.
 
 ## Commands
 
@@ -23,7 +23,7 @@ The browser calls the public lichess API directly, without a token. lichess allo
 - `src/render.ts`: functions that return HTML strings: summary cards, GitHub-style calendar, games table with sorting and filtering. Escape any user data with `esc()`.
 - `src/main.ts`: global `state`, a `render()` that re-renders everything, event delegation on `document`, and the `localStorage` cache.
 
-Caching in `main.ts`: games (and the optional rating history) are stored under `lch:games:<userId>`, with `version: 1` in the payload; the selected period is stored under `lch:since:<userId>`, as a preset key (`PRESETS` in `stats.ts`) or a custom `YYYY-MM-DD` start date. The period filters every section (on `createdAt`), except the ongoing-games chart, which still counts games started before the period. "Rafraîchir" is incremental: `incrementalSince` keeps cached games created before the oldest ongoing game, since finished games are immutable, and re-downloads everything after that date. "Tout recharger" ignores the cache. If the `Game` shape changes in an incompatible way, bump the cache version. The ongoing-games chart also draws the correspondence rating on a right-hand axis whose grid is aligned with the left one; which curves are shown is stored under `lch:chart-series`, and at least one curve stays visible.
+Caching in `main.ts`: games (and the optional rating history) are stored under `lch:games:<userId>`, with `version: 1` in the payload; the selected period is stored under `lch:since:<userId>`, as a preset key (`PRESETS` in `stats.ts`) or a custom `YYYY-MM-DD` start date. The period filters every section (on `createdAt`), except the ongoing-games chart, which still counts games started before the period. "Refresh" is incremental: `incrementalSince` keeps cached games created before the oldest ongoing game, since finished games are immutable, and re-downloads everything after that date. "Reload all" ignores the cache. If the `Game` shape changes in an incompatible way, bump the cache version. The ongoing-games chart also draws the correspondence rating on a right-hand axis whose grid is aligned with the left one; which curves are shown is stored under `lch:chart-series`, and at least one curve stays visible.
 
 ## lichess API quirks (verified empirically, don't "simplify" them away)
 
@@ -32,6 +32,6 @@ Caching in `main.ts`: games (and the optional rating history) are stored under `
 - The single-game export (`/game/export/{id}`) now requires a login and is not used. Board thumbnails come from `https://lichess1.org/game/export/gif/thumbnail/{id}.gif` (white orientation only).
 - The rating history (`/api/user/{id}/rating-history`) names the series `correspondence` in lowercase, and its points are `[year, month (0-based), day, rating]`. For some accounts it returns `[]` even though they have a correspondence rating (Nairwolf, for example). In that case the chart falls back to the rating each standard game started with (`myRating`), followed by the current rating.
 - Game statuses: a loss on time is `outoftime`. `timeout` means the opponent left and victory was claimed, so don't mix them up.
-- Correspondence games have no per-move timestamps, so "Coups/jour" is a whole-game average.
+- Correspondence games have no per-move timestamps, so "Moves/day" is a whole-game average.
 - Anonymous exports are throttled to about 20 games/s, so a first load of a long history is slow.
 - lichess returns 404 for curl's default User-Agent and for `HeadlessChrome`. When testing with curl or puppeteer, set a normal browser User-Agent.
