@@ -35,11 +35,6 @@ export function gamesByDay(games: Game[]): Map<string, Game[]> {
   return map;
 }
 
-export interface DayRange {
-  from: Date;
-  to: Date;
-}
-
 export interface Stats {
   total: number;
   ongoing: number;
@@ -50,7 +45,6 @@ export interface Stats {
   timeoutLosses: number;
   avgMoves?: number;
   oldestOngoing?: Game;
-  missedRanges: DayRange[];
   missedCount: number;
   analysedDays: number;
   currentStreak: number;
@@ -62,7 +56,6 @@ export function computeStats(games: Game[], byDay: Map<string, Game[]>, since: D
   const played = games.filter((g) => !g.ongoing && g.result !== 'aborted');
   const oldestOngoing = ongoing.reduce<Game | undefined>((old, g) => (!old || g.createdAt < old.createdAt ? g : old), undefined);
 
-  const missedRanges: DayRange[] = [];
   let missedCount = 0;
   let analysedDays = 0;
   let run = 0;
@@ -77,9 +70,6 @@ export function computeStats(games: Game[], byDay: Map<string, Game[]>, since: D
     }
     run = 0;
     missedCount++;
-    const last = missedRanges.at(-1);
-    if (last && dayKey(addDays(last.to, 1)) === dayKey(d)) last.to = d;
-    else missedRanges.push({ from: d, to: d });
   }
 
   // Today only counts once a game has been started, but doesn't break the streak before that.
@@ -96,7 +86,6 @@ export function computeStats(games: Game[], byDay: Map<string, Game[]>, since: D
     timeoutLosses: games.filter((g) => g.result === 'loss' && g.status === 'outoftime').length,
     avgMoves: played.length ? played.reduce((sum, g) => sum + fullMoves(g), 0) / played.length : undefined,
     oldestOngoing,
-    missedRanges: missedRanges.reverse(),
     missedCount,
     analysedDays,
     currentStreak,

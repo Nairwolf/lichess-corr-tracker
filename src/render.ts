@@ -1,5 +1,5 @@
 import type { Game } from './lichess';
-import { DAY_MS, addDays, dayKey, eachDay, fullMoves, type DayCount, type DayRange, type Stats } from './stats';
+import { DAY_MS, addDays, dayKey, eachDay, fullMoves, type DayCount, type Stats } from './stats';
 
 export type Filter = 'all' | 'ongoing' | 'myturn' | 'finished';
 export type SortKey = 'createdAt' | 'opponent' | 'color' | 'state' | 'plies' | 'pace' | 'daysPerTurn' | 'lastMoveAt' | 'duration';
@@ -316,18 +316,6 @@ export function renderOngoingChart(points: DayCount[], width: number, series: Se
     </svg>
     <div class="chart-tip" hidden><strong class="ongoing"></strong><strong class="rating"></strong><span></span></div>
     <p class="muted note">${notes.join(' ')}</p>`;
-}
-
-export function renderMissed(ranges: DayRange[]): string {
-  if (!ranges.length) return '<p class="good-text">No missed days in this period. Well done!</p>';
-  const MAX = 60;
-  const chips = ranges.slice(0, MAX).map(({ from, to }) => {
-    const n = Math.round((+to - +from) / DAY_MS) + 1;
-    const label = n === 1 ? fmtDate(from) : `${fmtDate(from)} → ${fmtDate(to)} <span class="muted">(${n} days)</span>`;
-    return `<li>${label}</li>`;
-  });
-  if (ranges.length > MAX) chips.push(`<li class="more">… and ${plural(ranges.length - MAX, 'more period')}</li>`);
-  return `<ul class="missed-list">${chips.join('')}</ul>`;
 }
 
 function sortValue(g: Game, key: SortKey, now: number): number | string {

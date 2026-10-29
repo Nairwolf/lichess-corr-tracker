@@ -205,10 +205,6 @@ h2 .muted {
   font-size: 15px;
   font-weight: 400;
 }
-.good-text {
-  color: var(--good);
-}
-
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -457,25 +453,6 @@ i.missed {
 .note {
   font-size: 12px;
   margin: 8px 0 0;
-}
-
-.missed-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.missed-list li.more {
-  background: none;
-  color: var(--muted);
-}
-.missed-list li {
-  background: color-mix(in srgb, var(--missed) 22%, transparent);
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 13px;
 }
 
 .chip {

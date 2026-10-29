@@ -21,7 +21,6 @@ import {
   fmtDate,
   fmtLongDate,
   renderCalendar,
-  renderMissed,
   renderOngoingChart,
   renderSeriesToggles,
   renderOldest,
@@ -224,7 +223,6 @@ function render() {
   sinceInput.min = dayKey(games.at(-1)!.createdAt);
   sinceInput.max = dayKey(today);
   $('calendar').innerHTML = renderCalendar(byDay, since, today, state.day);
-  $('missed').innerHTML = renderMissed(stats.missedRanges);
   ratingsFromLichess = !!state.ratings?.length;
   const ratings = ratingsFromLichess ? state.ratings! : ratingsFromGames(games, user.corrRating, state.fetchedAt ?? now);
   chartPoints = withRatings(ongoingByDay(games, since, today, now), ratings);
