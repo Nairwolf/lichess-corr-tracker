@@ -176,7 +176,8 @@ export async function fetchGames(
   opts: { since?: number; onGame?: (count: number) => void; signal?: AbortSignal } = {},
 ): Promise<Game[]> {
   const base = `${API}/games/user/${encodeURIComponent(user.id)}`;
-  const since = opts.since ? `&since=${opts.since}` : '';
+  // lichess drops the game created exactly at `since` (it compares at a coarser precision than ms): ask for 1 s earlier.
+  const since = opts.since ? `&since=${opts.since - 1000}` : '';
   const urls = [
     `${base}?ongoing=true&finished=false&moves=true`,
     `${base}?perfType=correspondence&moves=true${since}`,
