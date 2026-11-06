@@ -1,5 +1,5 @@
 import type { Game } from './lichess';
-import { DAY_MS, addDays, dayKey, eachDay, fullMoves, type DayCount, type Stats } from './stats';
+import { DAY_MS, addDays, dayKey, duration, eachDay, fullMoves, type DayCount, type Stats } from './stats';
 
 export type Filter = 'all' | 'ongoing' | 'myturn' | 'finished';
 export type SortKey = 'createdAt' | 'opponent' | 'color' | 'state' | 'plies' | 'pace' | 'daysPerTurn' | 'lastMoveAt' | 'duration';
@@ -44,7 +44,6 @@ function ago(ts: number, now: number): string {
   return d < 30 ? `${d}d ago` : fmtDate(ts);
 }
 
-const duration = (g: Game, now: number) => (g.ongoing ? now : g.lastMoveAt) - g.createdAt;
 const pace = (g: Game, now: number) => fullMoves(g) / Math.max(duration(g, now) / DAY_MS, 1);
 const decimalFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const gameUrl = (g: Game) => `https://lichess.org/${g.id}${g.color === 'black' ? '/black' : ''}`;
@@ -74,6 +73,7 @@ export function renderSummary(s: Stats): string {
   const finished = s.wins + s.draws + s.losses;
   const score = finished ? Math.round(((s.wins + s.draws / 2) / finished) * 100) : 0;
   const percent = (n: number, total: number) => (total ? ` (${Math.round((n / total) * 100)}%)` : '');
+  const fmtDays = (ms: number) => `${decimalFmt.format(ms / DAY_MS)} days`;
   return [
     card('Current streak', plural(s.currentStreak, 'day'), `longest: ${plural(s.longestStreak, 'day')}`),
     card(
@@ -91,9 +91,9 @@ export function renderSummary(s: Stats): string {
     card('Ongoing', String(s.ongoing), `your turn in ${s.myTurn}`),
     card('Record', `${s.wins} / ${s.draws} / ${s.losses}`, `W / D / L — score ${score}%`),
     card(
-      'Average moves',
-      s.avgMoves === undefined ? '—' : decimalFmt.format(s.avgMoves),
-      `over ${plural(finished, 'finished game')}`,
+      'Average duration',
+      s.avgDuration === undefined ? '—' : fmtDays(s.avgDuration),
+      `${s.medianDuration === undefined ? '' : `median ${fmtDays(s.medianDuration)} · `}over ${plural(finished, 'finished game')}`,
     ),
   ].join('');
 }

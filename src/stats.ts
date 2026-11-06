@@ -3,6 +3,7 @@ import type { Game, RatingPoint } from './lichess';
 export const DAY_MS = 86_400_000;
 
 export const fullMoves = (g: Game) => Math.ceil(g.plies / 2);
+export const duration = (g: Game, now: number) => (g.ongoing ? now : g.lastMoveAt) - g.createdAt;
 
 export function dayKey(d: Date | number): string {
   const date = typeof d === 'number' ? new Date(d) : d;
@@ -43,7 +44,8 @@ export interface Stats {
   draws: number;
   losses: number;
   timeoutLosses: number;
-  avgMoves?: number;
+  avgDuration?: number;
+  medianDuration?: number;
   oldestOngoing?: Game;
   missedCount: number;
   analysedDays: number;
@@ -55,6 +57,8 @@ export function computeStats(games: Game[], byDay: Map<string, Game[]>, since: D
   const ongoing = games.filter((g) => g.ongoing);
   const played = games.filter((g) => !g.ongoing && g.result !== 'aborted');
   const oldestOngoing = ongoing.reduce<Game | undefined>((old, g) => (!old || g.createdAt < old.createdAt ? g : old), undefined);
+  const durations = played.map((g) => duration(g, +today)).sort((a, b) => a - b);
+  const mid = durations.length >> 1;
 
   let missedCount = 0;
   let analysedDays = 0;
@@ -84,7 +88,12 @@ export function computeStats(games: Game[], byDay: Map<string, Game[]>, since: D
     draws: games.filter((g) => g.result === 'draw').length,
     losses: games.filter((g) => g.result === 'loss').length,
     timeoutLosses: games.filter((g) => g.result === 'loss' && g.status === 'outoftime').length,
-    avgMoves: played.length ? played.reduce((sum, g) => sum + fullMoves(g), 0) / played.length : undefined,
+    avgDuration: durations.length ? durations.reduce((sum, d) => sum + d, 0) / durations.length : undefined,
+    medianDuration: durations.length
+      ? durations.length % 2
+        ? durations[mid]
+        : (durations[mid - 1] + durations[mid]) / 2
+      : undefined,
     oldestOngoing,
     missedCount,
     analysedDays,
